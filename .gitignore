@@ -1,2 +1,5 @@
 /target
 .idea
+.DS_Store
+test_library/
+tidal_session.json

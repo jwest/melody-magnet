@@ -1,4 +1,6 @@
-# 🎵🧲 MelodyMagnet
+# 🎵🧲 MelodyMagnet (not working - in development)
+
+Create your private music library by download music from streaming services
 
 ## Disclaimer
 - Private use only.

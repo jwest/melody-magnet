@@ -36,7 +36,6 @@ fn main() {
                 info!("track: {:?}", track);
 
                 let track_source = tidal_backend.download_track(&track).unwrap();
-
                 library.save_track(&track, &track_source, &cover_source).unwrap();
             }
         }

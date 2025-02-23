@@ -86,7 +86,8 @@ impl Backend for Tidal {
                     let album_id = item["item"]["id"].as_i64().unwrap().to_string();
 
                     let cover_url = if let Some(cover_id) = item["item"]["cover"].as_str() {
-                        Some(format!("https://resources.tidal.com/images/{}/{}x{}.jpg", cover_id.replace('-', "/"), 320, 320))
+                        let cover_size = CoverSize::CoverSize640 as usize;
+                        Some(format!("https://resources.tidal.com/images/{}/{}x{}.jpg", cover_id.replace('-', "/"), cover_size, cover_size))
                     } else {
                         None
                     };
@@ -235,4 +236,12 @@ impl Backend for Tidal {
     fn deserialize(serialized: String) -> Self {
         serde_json::from_str(&serialized).unwrap()
     }
+}
+
+enum CoverSize {
+    CoverSize80 = 80,
+    CoverSize160 = 160,
+    CoverSize320 = 320,
+    CoverSize640 = 640,
+    CoverSize1280 = 1280,
 }

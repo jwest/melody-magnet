@@ -212,7 +212,7 @@ impl TidalSession {
         Ok(result)
     }
     pub(super) fn get_favorite_albums(&self) -> Result<Value, Box<dyn Error>> {
-        let response = self.request(format!("{}/users/{}/favorites/albums?countryCode={}&limit=30&offset=0", self.api_path, self.user_id, self.country_code))?;
+        let response = self.request(format!("{}/users/{}/favorites/albums?countryCode={}&limit=100&offset=0", self.api_path, self.user_id, self.country_code))?;
         let body = response.text()?;
         let result: Value = serde_json::from_str(&body)?;
         Ok(result)

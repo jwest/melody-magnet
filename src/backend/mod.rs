@@ -1,7 +1,7 @@
 use std::{fs, io};
 use std::fs::File;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use bytes::Bytes;
 use chrono::{Datelike, NaiveDate};
 use thiserror::Error;
@@ -31,6 +31,8 @@ pub struct Track {
     album: Album,
     track_number: u32,
     volume_number: u32,
+    // codec ACC
+    // Track { id: "83516195", title: "Whatever Lola Wants", album: Album { id: "83516182", artist: Artist { id: "3968881", name: "Bob & Ray" }, title: "Bob And Ray Throw A Stereo Spectacular", release_date: 1900-01-07, number_of_volumes: 1, cover_url: Some("https://resources.tidal.com/images/7b0e1c3d/0718/4669/a7a5/1735f7659610/640x640.jpg"), number_of_tracks: 15 }, track_number: 13, volume_number: 1 }
 }
 
 impl Track {
@@ -127,16 +129,17 @@ pub enum BackendType {
 }
 
 pub struct SessionStore {
+    path: String,
     backend_type: BackendType,
 }
 
 impl SessionStore {
-    pub fn init(backend_type: BackendType) -> Self {
-        Self { backend_type }
+    pub fn init(path: String, backend_type: BackendType) -> Self {
+        Self { path, backend_type }
     }
 
     pub fn load<T: Backend + 'static>(&self) -> Option<T> {
-        if !Path::new(self.file_path()).exists() {
+        if !self.file_path().exists() {
             return None;
         }
         match fs::read_to_string(self.file_path()) {
@@ -146,7 +149,7 @@ impl SessionStore {
     }
 
     pub fn save<T: Backend + 'static>(&self, backend: &T) {
-        if Path::new(self.file_path()).exists() {
+        if self.file_path().exists() {
             let _ = fs::remove_file(self.file_path());
         }
         let serialized = backend.serialize();
@@ -154,9 +157,10 @@ impl SessionStore {
         file.write_all(serialized.as_bytes()).unwrap();
     }
 
-    fn file_path(&self) -> &str {
+    fn file_path(&self) -> PathBuf {
+        let store_path = PathBuf::from(self.path.clone());
         match self.backend_type {
-            BackendType::Tidal => "./tidal_session.json",
+            BackendType::Tidal => store_path.join("tidal_session.json".to_string()).to_owned().to_path_buf(),
         }
     }
 }

@@ -119,25 +119,40 @@ impl MappedForPathName for Album {
     }
 }
 
-pub struct Pagination {
-    limit: u64,
-    offset: u64,
+#[derive(Debug)]
+#[derive(Clone)]
+pub struct Page {
+    page_number: usize,
+    limit: usize,
+    offset: usize,
+}
+
+#[derive(Debug)]
+struct Pagination {
+    current: Page,
 }
 
 impl Pagination {
-    pub fn init(limit: u64) -> Self {
-        Self { limit, offset: 0 }
+    fn init(limit: usize) -> Self {
+        Self { current: Page { page_number: 0, limit, offset: 0 } }
     }
-    pub fn get_limit(&self) -> u64 {
-        self.limit
-    }
-    pub fn get_offset(&self) -> u64 {
-        self.offset
+}
+
+impl Iterator for Pagination {
+    type Item = Page;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let next_page_number = self.current.page_number + 1;
+        let next_offset = next_page_number * self.current.limit;
+
+        self.current = Page { page_number: self.current.page_number + 1, limit: self.current.limit, offset: next_offset };
+
+        Some(self.current.clone())
     }
 }
 
 pub trait Backend {
-    fn get_favorite_albums(&self, pagination: Pagination) -> BackendResult<Vec<Album>>;
+    fn get_favorite_albums(&self) -> BackendResult<Vec<Album>>;
 
     fn get_album_tracks(&self, album: &Album) -> BackendResult<Vec<Track>>;
 

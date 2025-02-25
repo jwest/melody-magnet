@@ -20,3 +20,4 @@ strum = "0.27"
 strum_macros = "0.27"
 
 rusqlite = { version = "0.33.0", features = ["bundled", "chrono"] }
+cronjob = "0.4.17"

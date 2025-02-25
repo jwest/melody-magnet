@@ -8,6 +8,9 @@ use crate::backend::tidal::session::TidalSession;
 
 pub mod session;
 
+const FAVOURITE_ITEMS_PER_PAGE: usize = 100;
+
+#[derive(Clone)]
 #[derive(Serialize, Deserialize)]
 pub struct Tidal {
     session: TidalSession,
@@ -22,86 +25,95 @@ impl Tidal {
 }
 
 impl Backend for Tidal {
-    fn get_favorite_albums(&self, pagination: Pagination) -> BackendResult<Vec<Album>> {
-        let v = self.session.get_favorite_albums(pagination).unwrap();
-
+    fn get_favorite_albums(&self) -> BackendResult<Vec<Album>> {
         let mut albums: Vec<Album> = vec![];
+        let pagination = Pagination::init(FAVOURITE_ITEMS_PER_PAGE);
 
-        if let Value::Array(items) = &v["items"] {
-            for item in items {
-                // Parse item based on tidal API output
-                // {
-                //      "created": String("2020-08-10T12:52:04.605+0000"),
-                //      "item": Object {
-                //          "adSupportedStreamReady": Bool(true),
-                //          "allowStreaming": Bool(true),
-                //          "artist": Object {
-                //              "handle": Null,
-                //              "id": Number(3566483),
-                //              "name": String("Max Richter"),
-                //              "picture": String("83eeab6d-8a8a-4154-ba9d-160db15afcf2"),
-                //              "type": String("MAIN")
-                //          },
-                //          "artists": Array [
-                //              Object {
-                //                  "handle": Null,
-                //                  "id": Number(3566483),
-                //                  "name": String("Max Richter"),
-                //                  "picture": String("83eeab6d-8a8a-4154-ba9d-160db15afcf2"),
-                //                  "type": String("MAIN")
-                //              }
-                //          ],
-                //          "audioModes": Array [String("STEREO")],
-                //          "audioQuality": String("LOSSLESS"),
-                //          "copyright": String("© 2014 Deutsche Grammophon GmbH, Berlin"),
-                //          "cover": String("8cd770fb-f51b-4b9f-a120-31d274bd8ffe"),
-                //          "djReady": Bool(true),
-                //          "duration": Number(2296),
-                //          "explicit": Bool(false),
-                //          "id": Number(28477014),
-                //          "mediaMetadata": Object {"tags": Array [String("LOSSLESS")]},
-                //          "numberOfTracks": Number(27),
-                //          "numberOfVideos": Number(0),
-                //          "numberOfVolumes": Number(1),
-                //          "popularity": Number(43),
-                //          "premiumStreamingOnly": Bool(false),
-                //          "releaseDate": String("2014-01-01"),
-                //          "stemReady": Bool(false),
-                //          "streamReady": Bool(true),
-                //          "streamStartDate": String("2021-03-24T00:00:00.000+0000"),
-                //          "title": String("24 Postcards In Full Colour"),
-                //          "type": String("ALBUM"),
-                //          "upc": String("00028947933151"),
-                //          "upload": Bool(false),
-                //          "url": String("http://www.tidal.com/album/28477014"),
-                //          "version": Null,
-                //          "vibrantColor": String("#ede62f"),
-                //          "videoCover": Null
-                //      }
-                // }
+        for page in pagination {
+            info!("Tidal::get_favorite_albums: page={:?}", &page);
 
-                if item["item"]["adSupportedStreamReady"].as_bool().is_some_and(|ready| ready) {
-                    let album_id = item["item"]["id"].as_i64().unwrap().to_string();
+            let v = self.session.get_favorite_albums(page.limit, page.offset).unwrap();
 
-                    let cover_url = if let Some(cover_id) = item["item"]["cover"].as_str() {
-                        let cover_size = CoverSize::CoverSize640 as usize;
-                        Some(format!("https://resources.tidal.com/images/{}/{}x{}.jpg", cover_id.replace('-', "/"), cover_size, cover_size))
-                    } else {
-                        None
-                    };
+            if let Value::Array(items) = &v["items"] {
+                if items.len() < FAVOURITE_ITEMS_PER_PAGE {
+                    break;
+                }
 
-                    albums.push(Album {
-                        id: album_id.clone(),
-                        artist: Artist {
-                            id: item["item"]["artist"]["id"].as_i64().unwrap().to_string(),
-                            name: item["item"]["artist"]["name"].as_str().unwrap().to_string(),
-                        },
-                        title: item["item"]["title"].as_str().unwrap().to_string(),
-                        release_date: NaiveDate::parse_from_str(item["item"]["releaseDate"].as_str().unwrap(), "%Y-%m-%d").unwrap(),
-                        number_of_volumes: item["item"]["numberOfVolumes"].as_i64().unwrap() as u32,
-                        number_of_tracks: item["item"]["numberOfTracks"].as_i64().unwrap() as u32,
-                        cover_url,
-                    })
+                for item in items {
+                    // Parse item based on tidal API output
+                    // {
+                    //      "created": String("2020-08-10T12:52:04.605+0000"),
+                    //      "item": Object {
+                    //          "adSupportedStreamReady": Bool(true),
+                    //          "allowStreaming": Bool(true),
+                    //          "artist": Object {
+                    //              "handle": Null,
+                    //              "id": Number(3566483),
+                    //              "name": String("Max Richter"),
+                    //              "picture": String("83eeab6d-8a8a-4154-ba9d-160db15afcf2"),
+                    //              "type": String("MAIN")
+                    //          },
+                    //          "artists": Array [
+                    //              Object {
+                    //                  "handle": Null,
+                    //                  "id": Number(3566483),
+                    //                  "name": String("Max Richter"),
+                    //                  "picture": String("83eeab6d-8a8a-4154-ba9d-160db15afcf2"),
+                    //                  "type": String("MAIN")
+                    //              }
+                    //          ],
+                    //          "audioModes": Array [String("STEREO")],
+                    //          "audioQuality": String("LOSSLESS"),
+                    //          "copyright": String("© 2014 Deutsche Grammophon GmbH, Berlin"),
+                    //          "cover": String("8cd770fb-f51b-4b9f-a120-31d274bd8ffe"),
+                    //          "djReady": Bool(true),
+                    //          "duration": Number(2296),
+                    //          "explicit": Bool(false),
+                    //          "id": Number(28477014),
+                    //          "mediaMetadata": Object {"tags": Array [String("LOSSLESS")]},
+                    //          "numberOfTracks": Number(27),
+                    //          "numberOfVideos": Number(0),
+                    //          "numberOfVolumes": Number(1),
+                    //          "popularity": Number(43),
+                    //          "premiumStreamingOnly": Bool(false),
+                    //          "releaseDate": String("2014-01-01"),
+                    //          "stemReady": Bool(false),
+                    //          "streamReady": Bool(true),
+                    //          "streamStartDate": String("2021-03-24T00:00:00.000+0000"),
+                    //          "title": String("24 Postcards In Full Colour"),
+                    //          "type": String("ALBUM"),
+                    //          "upc": String("00028947933151"),
+                    //          "upload": Bool(false),
+                    //          "url": String("http://www.tidal.com/album/28477014"),
+                    //          "version": Null,
+                    //          "vibrantColor": String("#ede62f"),
+                    //          "videoCover": Null
+                    //      }
+                    // }
+
+                    if item["item"]["adSupportedStreamReady"].as_bool().is_some_and(|ready| ready) {
+                        let album_id = item["item"]["id"].as_i64().unwrap().to_string();
+
+                        let cover_url = if let Some(cover_id) = item["item"]["cover"].as_str() {
+                            let cover_size = CoverSize::CoverSize640 as usize;
+                            Some(format!("https://resources.tidal.com/images/{}/{}x{}.jpg", cover_id.replace('-', "/"), cover_size, cover_size))
+                        } else {
+                            None
+                        };
+
+                        albums.push(Album {
+                            id: album_id.clone(),
+                            artist: Artist {
+                                id: item["item"]["artist"]["id"].as_i64().unwrap().to_string(),
+                                name: item["item"]["artist"]["name"].as_str().unwrap().to_string(),
+                            },
+                            title: item["item"]["title"].as_str().unwrap().to_string(),
+                            release_date: NaiveDate::parse_from_str(item["item"]["releaseDate"].as_str().unwrap(), "%Y-%m-%d").unwrap(),
+                            number_of_volumes: item["item"]["numberOfVolumes"].as_i64().unwrap() as u32,
+                            number_of_tracks: item["item"]["numberOfTracks"].as_i64().unwrap() as u32,
+                            cover_url,
+                        })
+                    }
                 }
             }
         }

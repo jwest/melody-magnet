@@ -6,6 +6,8 @@ use metaflac::block::PictureType;
 use metaflac::Tag;
 use crate::backend::{Album, Track};
 
+pub mod registry;
+
 pub struct Library {
     path: PathBuf,
 }

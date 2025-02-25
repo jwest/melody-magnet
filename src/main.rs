@@ -1,10 +1,11 @@
+use cronjob::CronJob;
 use dotenvy::dotenv;
 use env_logger::Target;
 use log::{error, info};
-use crate::backend::{Backend, BackendType, Pagination, SessionStore};
+use crate::backend::{Backend, BackendType, SessionStore};
 use crate::backend::tidal::Tidal;
 use crate::infrastructure::config::Config;
-use crate::infrastructure::registry::{FavouriteAlbums, SQLiteRegistry};
+use library::registry::{FavouriteAlbums, SQLiteRegistry};
 use crate::library::Library;
 
 mod backend;
@@ -19,6 +20,14 @@ fn main() {
         .filter_level(log::LevelFilter::Info)
         .init();
 
+    let mut cron_sync = CronJob::new("Sync favourites", sync_favourites);
+    cron_sync.seconds("0");
+    cron_sync.start_job();
+}
+
+fn sync_favourites(_: &str) {
+    info!("Sync favourites cron job started");
+
     let config = Config::init().expect("Config initialization error!");
     let registry = SQLiteRegistry::init(config.database_file_path);
     let library = Library::init(config.library_path);
@@ -27,16 +36,8 @@ fn main() {
     let tidal_backend = session_store.load::<Tidal>().unwrap_or_else(|| Tidal::init());
     session_store.save(&tidal_backend);
 
-    let favourite_albums = tidal_backend.get_favorite_albums(Pagination::init(5)).unwrap();
-    for album in favourite_albums {
-        if !registry.is_album_exists(&album).expect("problem with database") {
-            registry.request_favourite_album(&album).unwrap();
-        }
-    }
-
     while let Some(album) = registry.get_next_to_synchronize_and_mark_as_processing().expect("problem with database") {
-        let stats = registry.get_stats().expect("problem with aggregate statistics");
-        info!("Current stats: {:?}", stats);
+        print_stats(&registry);
 
         if !library.is_album_exists(&album) {
             registry.mark_album_as_processing(&album).unwrap();
@@ -64,4 +65,21 @@ fn main() {
             }
         }
     }
+
+    print_stats(&registry);
+
+    let favourite_albums = tidal_backend.get_favorite_albums().unwrap();
+    for album in favourite_albums {
+        if !&registry.is_album_exists(&album).expect("problem with database") {
+            let _ = &registry.request_favourite_album(&album).unwrap();
+            info!("Album requested to synchronize: {:?}", &album);
+        }
+    }
+
+    print_stats(&registry);
+}
+
+fn print_stats(registry: &SQLiteRegistry) {
+    let stats = registry.get_stats().expect("problem with aggregate statistics");
+    info!("Current sync stats: {:?}", stats);
 }

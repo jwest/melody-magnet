@@ -8,7 +8,6 @@ use std::error::Error;
 use std::time::Duration;
 use std::thread;
 use log::info;
-use crate::backend::Pagination;
 
 #[derive(Debug)]
 #[derive(Clone)]
@@ -194,8 +193,8 @@ impl TidalSession {
         let res = self.build_client().get(url).send()?;
         Ok(res)
     }
-    pub(super) fn get_favorite_albums(&self, pagination: Pagination) -> Result<Value, Box<dyn Error>> {
-        let response = self.request(format!("{}/users/{}/favorites/albums?countryCode={}&limit={}&offset={}", self.api_path, self.user_id, self.country_code, pagination.get_limit(), pagination.get_offset()))?;
+    pub(super) fn get_favorite_albums(&self, limit: usize, offset: usize) -> Result<Value, Box<dyn Error>> {
+        let response = self.request(format!("{}/users/{}/favorites/albums?countryCode={}&limit={}&offset={}", self.api_path, self.user_id, self.country_code, limit, offset))?;
         let body = response.text()?;
         let result: Value = serde_json::from_str(&body)?;
         Ok(result)

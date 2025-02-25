@@ -2,4 +2,5 @@
 .idea
 .DS_Store
 library/
+library.db
 tidal_session.json

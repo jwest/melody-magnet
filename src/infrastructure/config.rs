@@ -6,4 +6,6 @@ pub struct Config {
     pub library_path: String,
     #[env_config(name = "SESSION_STORE_PATH", default = "/config", help = "keep streaming session - need write permission")]
     pub session_store_path: String,
+    #[env_config(name = "DATABASE_FILE_PATH", default = "./library.db", help = "path to SQLite database file")]
+    pub database_file_path: String,
 }

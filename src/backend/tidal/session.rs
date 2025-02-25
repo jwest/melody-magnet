@@ -6,8 +6,9 @@ use serde_json::Value;
 
 use std::error::Error;
 use std::time::Duration;
-use std::{time, thread};
-use log::{debug, error, info};
+use std::thread;
+use log::info;
+use crate::backend::Pagination;
 
 #[derive(Debug)]
 #[derive(Clone)]
@@ -160,18 +161,6 @@ impl TidalSession {
 
         Self::init(Self::refresh_access_token(config)?)
     }
-    fn read_session(token: &str) -> Result<ResponseTidalSession, Box<dyn Error>> {
-        let mut headers = header::HeaderMap::new();
-        headers.insert(header::AUTHORIZATION, header::HeaderValue::from_str(token).unwrap());
-
-        let client = reqwest::blocking::Client::builder()
-            .default_headers(headers)
-            .build()?;
-        let res = client.get("https://api.tidal.com/v1/sessions").send()?;
-
-        let session = res.json::<ResponseTidalSession>()?;
-        return Ok(session)
-    }
     fn refresh_access_token(config: ResponseSession) -> Result<ResponseSession, Box<dyn Error>> {
         let client = Client::builder()
             .build()?;
@@ -205,14 +194,8 @@ impl TidalSession {
         let res = self.build_client().get(url).send()?;
         Ok(res)
     }
-    pub(super) fn get_favorites(&self) -> Result<Value, Box<dyn Error>> {
-        let response = self.request(format!("{}/users/{}/favorites/tracks?countryCode={}&limit=100&offset=0", self.api_path, self.user_id, self.country_code))?;
-        let body = response.text()?;
-        let result: Value = serde_json::from_str(&body)?;
-        Ok(result)
-    }
-    pub(super) fn get_favorite_albums(&self) -> Result<Value, Box<dyn Error>> {
-        let response = self.request(format!("{}/users/{}/favorites/albums?countryCode={}&limit=100&offset=0", self.api_path, self.user_id, self.country_code))?;
+    pub(super) fn get_favorite_albums(&self, pagination: Pagination) -> Result<Value, Box<dyn Error>> {
+        let response = self.request(format!("{}/users/{}/favorites/albums?countryCode={}&limit={}&offset={}", self.api_path, self.user_id, self.country_code, pagination.get_limit(), pagination.get_offset()))?;
         let body = response.text()?;
         let result: Value = serde_json::from_str(&body)?;
         Ok(result)

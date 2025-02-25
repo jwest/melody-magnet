@@ -1,11 +1,9 @@
-use std::error::Error;
-use std::ops::Deref;
 use bytes::Bytes;
 use chrono::NaiveDate;
 use log::info;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use crate::backend::{Album, AlbumId, Artist, Backend, BackendError, BackendResult, Track, TrackId};
+use crate::backend::{Album, Artist, Backend, BackendError, BackendResult, Pagination, Track};
 use crate::backend::tidal::session::TidalSession;
 
 pub mod session;
@@ -24,8 +22,8 @@ impl Tidal {
 }
 
 impl Backend for Tidal {
-    fn get_favorite_albums(&self) -> BackendResult<Vec<Album>> {
-        let v = self.session.get_favorite_albums().unwrap();
+    fn get_favorite_albums(&self, pagination: Pagination) -> BackendResult<Vec<Album>> {
+        let v = self.session.get_favorite_albums(pagination).unwrap();
 
         let mut albums: Vec<Album> = vec![];
 

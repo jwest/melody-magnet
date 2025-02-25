@@ -1,15 +1,16 @@
 use std::{fs, io};
 use std::fs::File;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use bytes::Bytes;
 use chrono::{Datelike, NaiveDate};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
 use crate::library::MappedForPathName;
 
 pub mod tidal;
 
-pub type TrackId = String;
 pub type AlbumId = String;
 pub type ArtistId = String;
 
@@ -25,6 +26,7 @@ pub type BackendResult<T> = Result<T, BackendError>;
 
 #[derive(Debug)]
 #[derive(Clone)]
+#[derive(Serialize, Deserialize)]
 pub struct Track {
     id: ArtistId,
     title: String,
@@ -58,6 +60,7 @@ impl MappedForPathName for Track {
 
 #[derive(Debug)]
 #[derive(Clone)]
+#[derive(Serialize, Deserialize)]
 pub struct Artist {
     id: ArtistId,
     name: String,
@@ -77,10 +80,12 @@ impl MappedForPathName for Artist {
 
 #[derive(Debug)]
 #[derive(Clone)]
+#[derive(Serialize, Deserialize)]
 pub struct Album {
     id: AlbumId,
     artist: Artist,
     title: String,
+    // #[serde(with = "ts_seconds_option")]
     release_date: NaiveDate,
     number_of_volumes: u32,
     cover_url: Option<String>,
@@ -88,6 +93,9 @@ pub struct Album {
 }
 
 impl Album {
+    pub fn get_id(&self) -> AlbumId {
+        self.id.clone()
+    }
     pub fn get_artist(&self) -> Artist {
         self.artist.clone()
     }
@@ -111,8 +119,25 @@ impl MappedForPathName for Album {
     }
 }
 
+pub struct Pagination {
+    limit: u64,
+    offset: u64,
+}
+
+impl Pagination {
+    pub fn init(limit: u64) -> Self {
+        Self { limit, offset: 0 }
+    }
+    pub fn get_limit(&self) -> u64 {
+        self.limit
+    }
+    pub fn get_offset(&self) -> u64 {
+        self.offset
+    }
+}
+
 pub trait Backend {
-    fn get_favorite_albums(&self) -> BackendResult<Vec<Album>>;
+    fn get_favorite_albums(&self, pagination: Pagination) -> BackendResult<Vec<Album>>;
 
     fn get_album_tracks(&self, album: &Album) -> BackendResult<Vec<Track>>;
 
@@ -124,6 +149,7 @@ pub trait Backend {
     fn deserialize(serialized: String) -> Self where Self: Sized;
 }
 
+#[derive(strum_macros::Display)]
 pub enum BackendType {
     Tidal,
 }

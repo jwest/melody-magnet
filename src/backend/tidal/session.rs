@@ -1,13 +1,24 @@
 use bytes::Bytes;
 use reqwest::blocking::{Client, Response};
-use reqwest::header;
+use reqwest::{header, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use std::error::Error;
 use std::time::Duration;
 use std::thread;
-use log::info;
+use log::{error, info};
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum TidalClientError {
+    #[error("Error on getting track url")]
+    GettingTrackUrlError,
+    #[error("The token has expired")]
+    AuthorizationError,
+    #[error("Request error")]
+    RequestError,
+}
 
 #[derive(Debug)]
 #[derive(Clone)]
@@ -22,7 +33,6 @@ pub struct TidalSession {
     user_id: i64,
     token: String,
     api_path: String,
-    audio_quality: String,
 }
 
 #[derive(Debug)]
@@ -117,8 +127,18 @@ impl TidalSession {
 
         TidalSession::init(session_response).unwrap()
     }
+    pub fn refresh_token(&mut self) -> Result<(), Box<dyn Error>> {
+        let refreshed_session = Self::refresh_access_token(self.refresh_token.clone())?;
+
+        self.token_type = refreshed_session.token_type.clone();
+        self.token = refreshed_session.access_token.clone();
+        self.refresh_token = refreshed_session.refresh_token.clone();
+
+        Ok(())
+    }
+
     fn login_link() -> Result<DeviceAuthorization, Box<dyn Error>> {
-        let client = reqwest::blocking::Client::builder()
+        let client = Client::builder()
             .build()?;
         let res = client.post("https://auth.tidal.com:443/v1/oauth2/device_authorization")
             .form(&[("client_id", CLIENT_ID), ("scope", "r_usr+w_usr+w_sub")])
@@ -149,7 +169,6 @@ impl TidalSession {
                 user_id: session.user_id,
                 token: config.token().clone(),
                 api_path: "https://api.tidal.com/v1".to_string(),
-                audio_quality: "LOSSLESS".to_string(),
                 access_token: config.access_token.clone(),
                 refresh_token: config.refresh_token.clone(),
                 token_type: config.token_type.clone(),
@@ -158,15 +177,15 @@ impl TidalSession {
 
         info!("[Session] outdated, refresh needed, {:?}", res);
 
-        Self::init(Self::refresh_access_token(config)?)
+        Self::init(Self::refresh_access_token(config.refresh_token)?)
     }
-    fn refresh_access_token(config: ResponseSession) -> Result<ResponseSession, Box<dyn Error>> {
+    fn refresh_access_token(refresh_token: String) -> Result<ResponseSession, Box<dyn Error>> {
         let client = Client::builder()
             .build()?;
         let res = client.post("https://auth.tidal.com:443/v1/oauth2/token")
             .form(&[
                 ("grant_type", "refresh_token"),
-                ("refresh_token", config.refresh_token.as_str()),
+                ("refresh_token", refresh_token.as_str()),
                 ("client_id", CLIENT_ID),
                 ("client_secret", CLIENT_SECRET)
             ])
@@ -178,7 +197,7 @@ impl TidalSession {
         Ok(ResponseSession {
             token_type: refresh_auth_response.token_type,
             access_token: refresh_auth_response.access_token,
-            refresh_token: config.refresh_token,
+            refresh_token,
         })
     }
     fn build_client(&self) -> Client {
@@ -190,14 +209,29 @@ impl TidalSession {
             .build().unwrap()
     }
     fn request(&self, url: String) -> Result<Response, Box<dyn Error>> {
-        let res = self.build_client().get(url).send()?;
+        let res = self.build_client().get(url)
+            .header(header::AUTHORIZATION, header::HeaderValue::from_str(format!("Bearer {}", self.token).as_str()).unwrap())
+            .send()?;
         Ok(res)
     }
     pub(super) fn get_favorite_albums(&self, limit: usize, offset: usize) -> Result<Value, Box<dyn Error>> {
-        let response = self.request(format!("{}/users/{}/favorites/albums?countryCode={}&limit={}&offset={}", self.api_path, self.user_id, self.country_code, limit, offset))?;
-        let body = response.text()?;
-        let result: Value = serde_json::from_str(&body)?;
-        Ok(result)
+        let response = self.request(format!("{}/users/{}/favorites/albums?sessionId={}&countryCode={}&limit={}&offset={}", self.api_path, self.user_id, self.session_id, self.country_code, limit, offset))?;
+
+        match response.status() {
+            StatusCode::OK => {
+                let body = response.text()?;
+                let result: Value = serde_json::from_str(&body)?;
+                Ok(result)
+            },
+            StatusCode::UNAUTHORIZED => {
+                error!("Tidal client request error, {:?}", response.text());
+                Err(TidalClientError::AuthorizationError.into())
+            },
+            _ => {
+                error!("Tidal client request error, {:?}, {:?}", response.status(), response.text());
+                Err(TidalClientError::RequestError.into())
+            }
+        }
     }
     pub(super) fn get_album(&self, album_id: &str) -> Result<Value, Box<dyn Error>> {
         let response = self.request(format!("{}/albums/{}/tracks?countryCode={}&deviceType=BROWSER", self.api_path, album_id, self.country_code))?;
@@ -206,14 +240,20 @@ impl TidalSession {
         Ok(result)
     }
     fn get_track_url(&self, track_id: String) -> Result<String, Box<dyn Error>> {
-        let download_url = format!("{}/tracks/{}/urlpostpaywall?sessionId={}&urlusagemode=STREAM&audioquality={}&assetpresentation=FULL", self.api_path, track_id, self.session_id, self.audio_quality);
-        info!("Download track: {}, with url: {}", track_id, download_url);
-        let response = self.request(download_url)?;
-        if response.status().is_success() {
-            let url = response.json::<ResponseMedia>()?.urls[0].clone();
-            Ok(url)
-        } else {
-            Err(response.text()?.into())
+        let mut url: Option<String> = None;
+        for quality in vec!["HI_RES_LOSSLESS", "LOSSLESS", "HIGH"] {
+            let download_url = format!("{}/tracks/{}/urlpostpaywall?sessionId={}&urlusagemode=STREAM&audioquality={}&assetpresentation=FULL", self.api_path, track_id, self.session_id, quality);
+            info!("Download track: {}, with url: {}", track_id, download_url);
+            let response = self.request(download_url)?;
+            if response.status().is_success() {
+                url = Some(response.json::<ResponseMedia>()?.urls[0].clone());
+                break;
+            }
+        }
+
+        match &url {
+            Some(url) => Ok(url.clone()),
+            None => Err(TidalClientError::GettingTrackUrlError.into()),
         }
     }
     pub(super) fn get_track_bytes(&self, track_id: String) -> Result<Bytes, Box<dyn Error>> {

@@ -1,0 +1,11 @@
+services:
+  melody-magnet:
+    image: jwestfalewski/melody-magnet:1.1.0
+    user: 1001:1001
+    environment:
+      LIBRARY_PATH: '/library'
+      SESSION_STORE_PATH: '/data'
+      DATABASE_FILE_PATH: '/data/library.db'
+    volumes:
+      - './library:/library:rw'
+      - './data:/data:rw'

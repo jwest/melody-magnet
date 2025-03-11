@@ -1,7 +1,7 @@
 use cronjob::CronJob;
 use dotenvy::dotenv;
 use env_logger::Target;
-use log::{error, info};
+use log::{error, info, warn};
 use crate::backend::{Backend, BackendType, SessionStore};
 use crate::backend::tidal::Tidal;
 use crate::infrastructure::config::Config;
@@ -21,7 +21,7 @@ fn main() {
         .init();
 
     let mut cron_sync = CronJob::new("Sync favourites", sync_favourites);
-    cron_sync.seconds("0");
+    cron_sync.seconds("0,5,10,15,20,25,30,35,40,45,50,55");
     cron_sync.start_job();
 }
 
@@ -33,8 +33,7 @@ fn sync_favourites(_: &str) {
     let library = Library::init(config.library_path);
 
     let session_store = SessionStore::init(config.session_store_path, BackendType::Tidal);
-    let tidal_backend = session_store.load::<Tidal>().unwrap_or_else(|| Tidal::init());
-    session_store.save(&tidal_backend);
+    let mut tidal_backend = session_store.load::<Tidal>().unwrap_or_else(|| Tidal::init());
 
     while let Some(album) = registry.get_next_to_synchronize_and_mark_as_processing().expect("problem with database") {
         print_stats(&registry);
@@ -68,15 +67,23 @@ fn sync_favourites(_: &str) {
 
     print_stats(&registry);
 
-    let favourite_albums = tidal_backend.get_favorite_albums().unwrap();
-    for album in favourite_albums {
-        if !&registry.is_album_exists(&album).expect("problem with database") {
-            let _ = &registry.request_favourite_album(&album).unwrap();
-            info!("Album requested to synchronize: {:?}", &album);
+    match tidal_backend.get_favorite_albums() {
+        Ok(favourite_albums) => {
+            for album in favourite_albums {
+                if !&registry.is_album_exists(&album).expect("problem with database") {
+                    let _ = &registry.request_favourite_album(&album).unwrap();
+                    info!("Album requested to synchronize: {:?}", &album);
+                }
+            }
+
+            print_stats(&registry);
+        },
+        Err(err) => {
+            warn!("Probably token expire, refreshing... ({:?})", err);
+            tidal_backend.refresh_token().unwrap();
+            session_store.save(&tidal_backend);
         }
     }
-
-    print_stats(&registry);
 }
 
 fn print_stats(registry: &SQLiteRegistry) {

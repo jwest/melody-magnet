@@ -4,3 +4,4 @@
 library/
 library.db
 tidal_session.json
+docker-compose.yml

@@ -1,6 +1,6 @@
 use bytes::Bytes;
 use chrono::NaiveDate;
-use log::info;
+use log::{error, info};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use crate::backend::{Album, Artist, Backend, BackendError, BackendResult, Pagination, Track};
@@ -22,6 +22,11 @@ impl Tidal {
             session: TidalSession::setup(),
         }
     }
+
+    pub(crate) fn refresh_token(&mut self) -> BackendResult<()> {
+        self.session.refresh_token().unwrap();
+        Ok(())
+    }
 }
 
 impl Backend for Tidal {
@@ -32,10 +37,16 @@ impl Backend for Tidal {
         for page in pagination {
             info!("Tidal::get_favorite_albums: page={:?}", &page);
 
-            let v = self.session.get_favorite_albums(page.limit, page.offset).unwrap();
+            let v = self.session.get_favorite_albums(page.limit, page.offset);
 
-            if let Value::Array(items) = &v["items"] {
-                if items.len() < FAVOURITE_ITEMS_PER_PAGE {
+            if v.is_err() {
+                error!("Backend error: {:?}", v.err().unwrap());
+                return Err(BackendError::RequestError);
+            }
+
+            if let Value::Array(items) = &v.unwrap()["items"] {
+                info!("{:?}, {:?}", items.is_empty(), items);
+                if items.is_empty() {
                     break;
                 }
 

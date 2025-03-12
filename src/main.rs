@@ -1,7 +1,8 @@
-use cronjob::CronJob;
+use std::sync::Mutex;
+use chrono_tz::Tz;
 use dotenvy::dotenv;
 use env_logger::Target;
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use crate::backend::{Backend, BackendType, SessionStore};
 use crate::backend::tidal::Tidal;
 use crate::infrastructure::config::Config;
@@ -14,18 +15,32 @@ mod infrastructure;
 
 fn main() {
     dotenv().ok();
+    let config = Config::init().expect("Config initialization error!");
 
     env_logger::Builder::from_default_env()
         .target(Target::Stdout)
         .filter_level(log::LevelFilter::Info)
         .init();
 
-    let mut cron_sync = CronJob::new("Sync favourites", sync_favourites);
-    cron_sync.seconds("0,5,10,15,20,25,30,35,40,45,50,55");
-    cron_sync.start_job();
+    let local_tz : Tz = config.time_zone.as_str().parse().unwrap();
+
+    info!("Local timezone: {}", local_tz);
+    info!("Cron tab definition: {}", config.cron_tab_definition);
+
+    let mut cron = cron_tab::Cron::new(local_tz);
+    let lock = Mutex::new(0);
+
+    cron.add_fn(config.cron_tab_definition.as_str(), move || {
+        match lock.try_lock() {
+            Ok(_) => sync_favourites(),
+            Err(_) => debug!("Next run locked, skipping..."),
+        }
+    }).unwrap();
+
+    cron.start_blocking();
 }
 
-fn sync_favourites(_: &str) {
+fn sync_favourites() {
     info!("Sync favourites cron job started");
 
     let config = Config::init().expect("Config initialization error!");

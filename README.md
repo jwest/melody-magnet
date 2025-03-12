@@ -4,10 +4,8 @@ Create your private music library by download music from streaming services
 
 TODO
 - runner refactoring for cron and async download requests
-- favourites artist albums download
-- http server for tidal login and monitoring download
-
-
+- favourites artist albums and tracks download
+- http server for tidal login, monitoring download, request download
 
 ## Disclaimer
 - Private use only.

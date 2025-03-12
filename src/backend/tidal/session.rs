@@ -7,7 +7,7 @@ use serde_json::Value;
 use std::error::Error;
 use std::time::Duration;
 use std::thread;
-use log::{error, info};
+use log::{debug, error, info};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -220,6 +220,7 @@ impl TidalSession {
         match response.status() {
             StatusCode::OK => {
                 let body = response.text()?;
+                debug!("[Session] get favorite albums: {}", body);
                 let result: Value = serde_json::from_str(&body)?;
                 Ok(result)
             },

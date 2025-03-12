@@ -1,6 +1,6 @@
 services:
   melody-magnet:
-    image: jwestfalewski/melody-magnet:1.1.0
+    image: jwestfalewski/melody-magnet:1.2.0
     user: 1001:1001
     environment:
       LIBRARY_PATH: '/library'

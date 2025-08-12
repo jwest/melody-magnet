@@ -22,3 +22,7 @@ strum_macros = "0.27"
 
 rusqlite = { version = "0.34.0", features = ["bundled", "chrono"] }
 cron_tab = {version = "0.2", features = ["sync"]}
+
+tiny_http = "0.12"
+once_cell = "1.19"
+url = "2.5"

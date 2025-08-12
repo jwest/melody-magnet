@@ -19,7 +19,12 @@ impl Library {
     pub fn is_album_exists(&self, album: &Album) -> bool {
         self.path.clone().join(album.get_artist().path_name()).join(album.path_name()).exists()
     }
-
+    pub fn remove_album(&self, album: &Album) {
+        let album_path = self.path.clone().join(album.get_artist().path_name()).join(album.path_name());
+        if album_path.exists() {
+            let _ = fs::remove_dir_all(&album_path);
+        }
+    }
     pub fn save_track(&self, track: &Track, source: &Bytes, cover_source: &Option<Bytes>) -> Result<(), Box<dyn Error>> {
         let volume_path = self.get_volume_path(track);
         fs::create_dir_all(&volume_path)?;

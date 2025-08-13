@@ -17,9 +17,6 @@ metaflac = "0.2"
 dotenvy = "0.15"
 dotenv_config = "0.2"
 
-strum = "0.27"
-strum_macros = "0.27"
-
 rusqlite = { version = "0.34.0", features = ["bundled", "chrono"] }
 cron_tab = {version = "0.2", features = ["sync"]}
 

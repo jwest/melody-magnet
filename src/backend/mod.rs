@@ -164,7 +164,16 @@ pub trait Backend {
     fn deserialize(serialized: String) -> Self where Self: Sized;
 }
 
-#[derive(strum_macros::Display)]
+use std::fmt;
+
+impl fmt::Display for BackendType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BackendType::Tidal => write!(f, "Tidal"),
+        }
+    }
+}
+
 pub enum BackendType {
     Tidal,
 }

@@ -258,6 +258,7 @@ impl Backend for Tidal {
     }
 }
 
+#[allow(dead_code)]
 enum CoverSize {
     CoverSize80 = 80,
     CoverSize160 = 160,

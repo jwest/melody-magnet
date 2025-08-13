@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::io::Read;
 
 use log::{error, info};
 use serde::Serialize;

@@ -3,11 +3,12 @@ use std::collections::HashMap;
 use log::{error, info};
 use serde::Serialize;
 use tiny_http::{Header, Method, Response, Server, StatusCode};
-
+use crate::http::ui::AlbumRow;
 use crate::infrastructure::config::Config;
 use crate::library::registry::{SQLiteRegistry, FavouriteAlbums};
 
 pub mod progress;
+pub mod ui;
 
 pub fn start_http_server(config: Config) {
     let http_enabled = config.http_enabled.unwrap_or(true);
@@ -31,7 +32,7 @@ pub fn start_http_server(config: Config) {
 
         match (method, url.as_str()) {
             (Method::Get, "/") => {
-                let response = Response::from_string(index_html())
+                let response = Response::from_string(ui::index_html())
                     .with_header(Header::from_bytes(&b"Content-Type"[..], &b"text/html; charset=utf-8"[..]).unwrap());
                 let _ = request.respond(response);
             }
@@ -152,27 +153,52 @@ pub fn start_http_server(config: Config) {
             }
             (Method::Get, "/ui/now") => {
                 let now = chrono::Local::now().format("%H:%M:%S").to_string();
-                let _ = request.respond(html_response(render_now(now)));
+                let _ = request.respond(html_response(ui::render_now(&now)));
             }
             (Method::Get, "/ui/stats") => {
-                let html = render_stats_html(&config.database_file_path);
+                let registry = SQLiteRegistry::init(config.database_file_path.clone());
+                let html = match registry.get_stats() {
+                    Ok(stats) => {
+                        let dto = StatsDto::from(stats);
+                        let view = ui::StatsView {
+                            album_requested: dto.album_requested,
+                            album_processing: dto.album_processing,
+                            album_synchronized: dto.album_synchronized,
+                            count_total: dto.count_total,
+                        };
+                        ui::render_stats_html(&view)
+                    }
+                    Err(_) => "<div class=stat>Stats unavailable</div>".to_string(),
+                };
                 let _ = request.respond(html_response(html));
             }
             (Method::Get, "/ui/progress") => {
-                let html = render_progress_html();
+                let snapshot = progress::snapshot();
+                let mut items: Vec<ui::ProgressView> = Vec::new();
+                items.reserve(snapshot.len());
+                for p in snapshot.values() {
+                    items.push(ui::ProgressView::from(p));
+                }
+                let html = ui::render_progress_html(&items);
                 let _ = request.respond(html_response(html));
             }
             (Method::Get, path) if path.starts_with("/ui/requested") => {
-                let html = match render_albums_tbody(&config.database_file_path, "Requested") {
-                    Ok(s) => s,
-                    Err(_) => "".to_string(),
+                let html = match list_albums(&config.database_file_path, "Requested", 10000, 0) {
+                    Ok(albums) => {
+                        let rows: Vec<ui::AlbumRow> = albums.into_iter().map(AlbumRow::from).collect();
+                        ui::render_albums_tbody("Requested", &rows)
+                    },
+                    Err(_) => String::new(),
                 };
                 let _ = request.respond(html_response(html));
             }
             (Method::Get, path) if path.starts_with("/ui/albums") => {
-                let html = match render_albums_tbody(&config.database_file_path, "Synchronized") {
-                    Ok(s) => s,
-                    Err(_) => "".to_string(),
+                let html = match list_albums(&config.database_file_path, "Synchronized", 10000, 0) {
+                    Ok(albums) => {
+                        let rows: Vec<ui::AlbumRow> = albums.into_iter().map(AlbumRow::from).collect();
+                        ui::render_albums_tbody("Synchronized", &rows)
+                    },
+                    Err(_) => String::new(),
                 };
                 let _ = request.respond(html_response(html));
             }
@@ -253,95 +279,4 @@ fn error_response(status: StatusCode, message: &str) -> Response<std::io::Cursor
     let mut response = Response::from_string(payload.to_string());
     response.add_header(Header::from_bytes(&b"Content-Type"[..], &b"application/json; charset=utf-8"[..]).unwrap());
     response.with_status_code(status)
-}
-
-fn render_now(now: String) -> String { now }
-
-fn render_stats_html(db_path: &str) -> String {
-    let registry = SQLiteRegistry::init(db_path.to_string());
-    match registry.get_stats() {
-        Ok(stats) => {
-            let dto = StatsDto::from(stats);
-            format!(
-                "<div class=stat>Requested: <b>{}</b></div>
-                 <div class=stat>Processing: <b>{}</b></div>
-                 <div class=stat>Synchronized: <b>{}</b></div>
-                 <div class=stat muted>Total: <b>{}</b></div>",
-                dto.album_requested, dto.album_processing, dto.album_synchronized, dto.count_total
-            )
-        }
-        Err(_) => "<div class=stat>Stats unavailable</div>".to_string(),
-    }
-}
-
-fn escape_html(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
-    for c in input.chars() {
-        match c {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            '\'' => out.push_str("&#39;"),
-            _ => out.push(c),
-        }
-    }
-    out
-}
-
-fn render_progress_html() -> String {
-    let mut out = String::new();
-    for p in crate::http::progress::snapshot().values() {
-        let pct = if p.total_tracks > 0 { (p.tracks_downloaded as f32 / p.total_tracks as f32) * 100.0 } else { 0.0 };
-        out.push_str(&format!(
-            "<div style=\"margin:6px 0; display:flex; justify-content:space-between; align-items:center; gap:8px;\">\
-                <div><b>{artist} - {title}</b> <span class=muted>({done}/{total})</span></div>\
-                <button hx-post=\"/api/cancel?id={id}\" class=btn-danger>Cancel</button>\
-             </div>\
-             <div class=progress><div class=bar style=\"width:{pct:.0}%\"></div></div>\
-             <div class=muted>{state} • {bytes} bytes</div>",
-            artist = escape_html(&p.artist),
-            title = escape_html(&p.title),
-            done = p.tracks_downloaded,
-            total = p.total_tracks,
-            id = p.album_id,
-            pct = pct,
-            state = p.state,
-            bytes = p.bytes_downloaded
-        ));
-    }
-    out
-}
-
-fn render_albums_tbody(db_path: &str, state: &str) -> Result<String, Box<dyn std::error::Error>> {
-    let albums = list_albums(db_path, state, 10000, 0)?;
-    let mut out = String::new();
-    for a in albums {
-        let artist = a.artist.unwrap_or_default();
-        let title = a.title.unwrap_or_default();
-        if state == "Requested" {
-            out.push_str(&format!(
-                "<tr><td>{id}</td><td>{artist}</td><td>{title}</td><td>{path}</td><td class=muted>-</td><td><button hx-post=\"/api/cancel?id={id}\" class=btn-danger>Cancel</button></td></tr>",
-                id = a.id,
-                artist = escape_html(&artist),
-                title = escape_html(&title),
-                path = escape_html(&a.path)
-            ));
-        } else {
-            out.push_str(&format!(
-                "<tr><td>{id}</td><td>{artist}</td><td>{title}</td><td>{path}</td><td class=muted>{updated}</td><td><button hx-confirm=\"Remove this album from library? This will delete files.\" hx-post=\"/api/remove?id={id}\" class=btn-danger>Remove</button></td></tr>",
-                id = a.id,
-                artist = escape_html(&artist),
-                title = escape_html(&title),
-                path = escape_html(&a.path),
-                updated = escape_html(&a.updated_at)
-            ));
-        }
-    }
-    Ok(out)
-}
-
-fn index_html() -> &'static str {
-    // Loaded from a separate template file at compile time.
-    include_str!("index.html")
 }

@@ -1,8 +1,8 @@
-use std::sync::Mutex;
-use chrono_tz::Tz;
 use dotenvy::dotenv;
 use env_logger::Target;
-use log::{debug, error, info, warn};
+use log::{error, info, warn};
+use std::thread;
+use std::time::Duration;
 use crate::backend::{Backend, BackendType, SessionStore};
 use crate::backend::tidal::Tidal;
 use crate::infrastructure::config::Config;
@@ -23,30 +23,22 @@ fn main() {
         .filter_level(log::LevelFilter::Info)
         .init();
 
-    let local_tz : Tz = config.time_zone.as_str().parse().unwrap();
+    let interval_secs = config.sync_interval_seconds.unwrap_or(300);
+    info!("Starting background worker with interval: {}s", interval_secs);
 
-    info!("Local timezone: {}", local_tz);
-    info!("Cron tab definition: {}", config.cron_tab_definition);
-
-    let mut cron = cron_tab::Cron::new(local_tz);
-    let lock = Mutex::new(0);
-
-    cron.add_fn(config.cron_tab_definition.as_str(), move || {
-        match lock.try_lock() {
-            Ok(_) => sync_favourites(),
-            Err(_) => debug!("Next run locked, skipping..."),
+    let worker_config = config.clone();
+    thread::spawn(move || {
+        loop {
+            sync_favourites();
+            thread::sleep(Duration::from_secs(interval_secs));
         }
-    }).unwrap();
-
-    std::thread::spawn(move || {
-        cron.start_blocking();
     });
 
-    http::start_http_server(config);
+    http::start_http_server(worker_config);
 }
 
 fn sync_favourites() {
-    info!("Sync favourites cron job started");
+    info!("Sync favourites cycle started");
 
     let config = Config::init().expect("Config initialization error!");
     let registry = SQLiteRegistry::init(config.database_file_path);

@@ -6,8 +6,7 @@ services:
       LIBRARY_PATH: '/library'
       SESSION_STORE_PATH: '/data'
       DATABASE_FILE_PATH: '/data/library.db'
-      TIME_ZONE: 'Europe/Warsaw'
-      CRON_TAB_DEFINITION: '* */5 * * * *'
+      SYNC_INTERVAL_SECONDS: '300'
     volumes:
       - './library:/library:rw'
       - './data:/data:rw'

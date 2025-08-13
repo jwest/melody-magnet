@@ -151,6 +151,32 @@ pub fn start_http_server(config: Config) {
                     let _ = request.respond(error_response(StatusCode(400), "missing id"));
                 }
             }
+            (Method::Get, "/ui/now") => {
+                let now = chrono::Local::now().format("%H:%M:%S").to_string();
+                let _ = request.respond(html_response(render_now(now)));
+            }
+            (Method::Get, "/ui/stats") => {
+                let html = render_stats_html(&config.database_file_path);
+                let _ = request.respond(html_response(html));
+            }
+            (Method::Get, "/ui/progress") => {
+                let html = render_progress_html();
+                let _ = request.respond(html_response(html));
+            }
+            (Method::Get, path) if path.starts_with("/ui/requested") => {
+                let html = match render_albums_tbody(&config.database_file_path, "Requested") {
+                    Ok(s) => s,
+                    Err(_) => "".to_string(),
+                };
+                let _ = request.respond(html_response(html));
+            }
+            (Method::Get, path) if path.starts_with("/ui/albums") => {
+                let html = match render_albums_tbody(&config.database_file_path, "Synchronized") {
+                    Ok(s) => s,
+                    Err(_) => "".to_string(),
+                };
+                let _ = request.respond(html_response(html));
+            }
             _ => {
                 let _ = request.respond(error_response(StatusCode(404), "Not Found"));
             }
@@ -217,6 +243,12 @@ fn json_response(body: String) -> Response<std::io::Cursor<Vec<u8>>> {
     response
 }
 
+fn html_response(body: String) -> Response<std::io::Cursor<Vec<u8>>> {
+    let mut response = Response::from_string(body);
+    response.add_header(Header::from_bytes(&b"Content-Type"[..], &b"text/html; charset=utf-8"[..]).unwrap());
+    response
+}
+
 fn error_response(status: StatusCode, message: &str) -> Response<std::io::Cursor<Vec<u8>>> {
     let payload = serde_json::json!({"error": message});
     let mut response = Response::from_string(payload.to_string());
@@ -224,130 +256,93 @@ fn error_response(status: StatusCode, message: &str) -> Response<std::io::Cursor
     response.with_status_code(status)
 }
 
-fn index_html() -> String {
-    // Minimal single-file frontend with simple polling and progress bars
-    let html = r#"<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Melody Magnet</title>
-  <style>
-    body { font-family: system-ui, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
-    header { padding: 16px; background: #111827; display: flex; justify-content: space-between; align-items: center; }
-    h1 { margin: 0; font-size: 18px; }
-    .container { padding: 16px; display: grid; grid-template-columns: 1fr; gap: 16px; }
-    .card { background: #1f2937; border-radius: 8px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,.4); }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
-    .stat { font-size: 14px; }
-    .progress { background: #334155; border-radius: 6px; overflow: hidden; height: 10px; }
-    .bar { background: #22c55e; height: 100%; width: 0%; transition: width .4s ease; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 8px; border-bottom: 1px solid #334155; text-align: left; font-size: 14px; }
-    .muted { color: #94a3b8; font-size: 12px; }
-    .badge { padding: 2px 8px; border-radius: 999px; background: #0ea5e9; font-size: 12px; }
-  </style>
-</head>
-<body>
-  <header>
-    <h1>Melody Magnet</h1>
-    <div class="muted">Live: <span id="last-update">-</span></div>
-  </header>
-  <div class="container">
-    <div class="grid">
-      <div class="card" id="stats">
-        <div class="stat">Requested: <b id="stat-requested">0</b></div>
-        <div class="stat">Processing: <b id="stat-processing">0</b></div>
-        <div class="stat">Synchronized: <b id="stat-synced">0</b></div>
-        <div class="stat muted">Total: <b id="stat-total">0</b></div>
-      </div>
-      <div class="card">
-        <h3 style="margin-top:0">Active Downloads</h3>
-        <div id="progress-list"></div>
-      </div>
-      <div class="card">
-        <h3 style="margin-top:0">Requested</h3>
-        <table>
-          <thead><tr><th>ID</th><th>Artist</th><th>Title</th><th>Path</th><th></th></tr></thead>
-          <tbody id="requested"></tbody>
-        </table>
-      </div>
-    </div>
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
-        <h3 style="margin:0">Library (Synchronized)</h3>
-        <span class="badge" id="filter">state=Synchronized</span>
-      </div>
-      <table>
-        <thead><tr><th>ID</th><th>Artist</th><th>Title</th><th>Path</th><th>Updated</th><th></th></tr></thead>
-        <tbody id="albums"></tbody>
-      </table>
-    </div>
-  </div>
-  <script>
-    const fmtPct = (n) => `${Math.max(0, Math.min(100, n)).toFixed(0)}%`;
-    async function fetchJson(url){ const r = await fetch(url); return await r.json(); }
-    async function postJson(url, payload){
-      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      return await r.json();
+fn render_now(now: String) -> String { now }
+
+fn render_stats_html(db_path: &str) -> String {
+    let registry = SQLiteRegistry::init(db_path.to_string());
+    match registry.get_stats() {
+        Ok(stats) => {
+            let dto = StatsDto::from(stats);
+            format!(
+                "<div class=stat>Requested: <b>{}</b></div>
+                 <div class=stat>Processing: <b>{}</b></div>
+                 <div class=stat>Synchronized: <b>{}</b></div>
+                 <div class=stat muted>Total: <b>{}</b></div>",
+                dto.album_requested, dto.album_processing, dto.album_synchronized, dto.count_total
+            )
+        }
+        Err(_) => "<div class=stat>Stats unavailable</div>".to_string(),
     }
-    async function cancelTask(id){
-      await postJson('/api/cancel', { id });
-      refresh();
+}
+
+fn escape_html(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    for c in input.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#39;"),
+            _ => out.push(c),
+        }
     }
-    async function removeAlbum(id){
-      if (!confirm('Remove this album from library? This will delete files.')) return;
-      await postJson('/api/remove', { id });
-      refresh();
+    out
+}
+
+fn render_progress_html() -> String {
+    let mut out = String::new();
+    for p in crate::http::progress::snapshot().values() {
+        let pct = if p.total_tracks > 0 { (p.tracks_downloaded as f32 / p.total_tracks as f32) * 100.0 } else { 0.0 };
+        out.push_str(&format!(
+            "<div style=\"margin:6px 0; display:flex; justify-content:space-between; align-items:center; gap:8px;\">\
+                <div><b>{artist} - {title}</b> <span class=muted>({done}/{total})</span></div>\
+                <button hx-post=\"/api/cancel?id={id}\" class=btn-danger>Cancel</button>\
+             </div>\
+             <div class=progress><div class=bar style=\"width:{pct:.0}%\"></div></div>\
+             <div class=muted>{state} • {bytes} bytes</div>",
+            artist = escape_html(&p.artist),
+            title = escape_html(&p.title),
+            done = p.tracks_downloaded,
+            total = p.total_tracks,
+            id = p.album_id,
+            pct = pct,
+            state = p.state,
+            bytes = p.bytes_downloaded
+        ));
     }
-    async function refresh(){
-      const [stats, progress, albums, requested] = await Promise.all([
-        fetchJson('/api/stats').catch(()=>null),
-        fetchJson('/api/progress').catch(()=>({})),
-        fetchJson('/api/albums?state=Synchronized&limit=10000').catch(()=>[]),
-        fetchJson('/api/albums?state=Requested&limit=10000').catch(()=>[]),
-      ]);
-      if (stats){
-        document.getElementById('stat-requested').textContent = stats.album_requested;
-        document.getElementById('stat-processing').textContent = stats.album_processing;
-        document.getElementById('stat-synced').textContent = stats.album_synchronized;
-        document.getElementById('stat-total').textContent = stats.count_total;
-      }
-      const list = document.getElementById('progress-list');
-      list.innerHTML = '';
-      Object.values(progress).forEach(p => {
-        const pct = p.total_tracks > 0 ? (p.tracks_downloaded / p.total_tracks)*100 : 0;
-        const el = document.createElement('div');
-        el.innerHTML = `
-          <div style="margin:6px 0; display:flex; justify-content:space-between; align-items:center; gap:8px;">
-            <div><b>${p.artist} - ${p.title}</b> <span class="muted">(${p.tracks_downloaded}/${p.total_tracks})</span></div>
-            <button onclick="cancelTask('${p.album_id}')" style="background:#ef4444;color:white;border:none;border-radius:6px;padding:4px 8px;cursor:pointer">Cancel</button>
-          </div>
-          <div class="progress"><div class="bar" style="width:${fmtPct(pct)}"></div></div>
-          <div class="muted">${p.state} • ${p.bytes_downloaded} bytes</div>
-        `;
-        list.appendChild(el);
-      });
-      const tbody = document.getElementById('albums');
-      tbody.innerHTML = '';
-      albums.forEach(a => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${a.id}</td><td>${a.artist ?? ''}</td><td>${a.title ?? ''}</td><td>${a.path}</td><td class="muted">${a.updated_at}</td><td><button onclick="removeAlbum('${a.id}')" style="background:#ef4444;color:white;border:none;border-radius:6px;padding:4px 8px;cursor:pointer">Remove</button></td>`;
-        tbody.appendChild(tr);
-      });
-      const reqBody = document.getElementById('requested');
-      reqBody.innerHTML = '';
-      requested.forEach(a => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${a.id}</td><td>${a.artist ?? ''}</td><td>${a.title ?? ''}</td><td>${a.path}</td><td><button onclick="cancelTask('${a.id}')" style="background:#ef4444;color:white;border:none;border-radius:6px;padding:4px 8px;cursor:pointer">Cancel</button></td>`;
-        reqBody.appendChild(tr);
-      });
-      document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+    out
+}
+
+fn render_albums_tbody(db_path: &str, state: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let albums = list_albums(db_path, state, 10000, 0)?;
+    let mut out = String::new();
+    for a in albums {
+        let artist = a.artist.unwrap_or_default();
+        let title = a.title.unwrap_or_default();
+        if state == "Requested" {
+            out.push_str(&format!(
+                "<tr><td>{id}</td><td>{artist}</td><td>{title}</td><td>{path}</td><td class=muted>-</td><td><button hx-post=\"/api/cancel?id={id}\" class=btn-danger>Cancel</button></td></tr>",
+                id = a.id,
+                artist = escape_html(&artist),
+                title = escape_html(&title),
+                path = escape_html(&a.path)
+            ));
+        } else {
+            out.push_str(&format!(
+                "<tr><td>{id}</td><td>{artist}</td><td>{title}</td><td>{path}</td><td class=muted>{updated}</td><td><button hx-confirm=\"Remove this album from library? This will delete files.\" hx-post=\"/api/remove?id={id}\" class=btn-danger>Remove</button></td></tr>",
+                id = a.id,
+                artist = escape_html(&artist),
+                title = escape_html(&title),
+                path = escape_html(&a.path),
+                updated = escape_html(&a.updated_at)
+            ));
+        }
     }
-    refresh();
-    setInterval(refresh, 1000);
-  </script>
-</body>
-</html>"#;
-    html.to_string()
+    Ok(out)
+}
+
+fn index_html() -> &'static str {
+    // Loaded from a separate template file at compile time.
+    include_str!("index.html")
 }

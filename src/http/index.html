@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Melody Magnet</title>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
+    header { padding: 16px; background: #111827; display: flex; justify-content: space-between; align-items: center; gap: 8px; position: sticky; top: 0; z-index: 10; }
+    h1 { margin: 0; font-size: 18px; }
+    .container { padding: 16px; display: grid; grid-template-columns: 1fr; gap: 16px; }
+    .card { background: #1f2937; border-radius: 8px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,.4); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+    .stat { font-size: 14px; }
+    .progress { background: #334155; border-radius: 6px; overflow: hidden; height: 10px; }
+    .bar { background: #22c55e; height: 100%; width: 0%; transition: width .4s ease; }
+
+    /* Pretty table styles */
+    .table-wrap { overflow-x: auto; border: 1px solid #334155; border-radius: 8px; }
+    table { width: 100%; border-collapse: separate; border-spacing: 0; }
+    thead th { background: #0b1220; position: sticky; top: 0; z-index: 1; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid #334155; text-align: left; font-size: 14px; }
+    tbody tr:hover { background: #162033; }
+    tbody tr:nth-child(even) { background: #1e2937; }
+
+    .section-row td { background: #0b1220; color: #93c5fd; font-weight: 600; border-top: 2px solid #334155; border-bottom: 2px solid #334155; }
+    .muted { color: #94a3b8; font-size: 12px; }
+    .badge { padding: 2px 8px; border-radius: 999px; background: #0ea5e9; font-size: 12px; color: #0b1220; }
+    .btn-danger { background:#ef4444;color:white;border:none;border-radius:6px;padding:6px 10px;cursor:pointer }
+
+    @media (max-width: 640px) {
+      th, td { font-size: 13px; padding: 8px 10px; }
+      h1 { font-size: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Melody Magnet</h1>
+    <div class="muted">Live: <span id="last-update" hx-get="/ui/now" hx-trigger="load, every 1s" hx-swap="innerHTML">-</span></div>
+  </header>
+  <div class="container">
+    <div class="grid">
+      <div class="card stat" id="stats" hx-get="/ui/stats" hx-trigger="load, every 1s"></div>
+      <div class="card">
+        <h3 style="margin-top:0">Active Downloads</h3>
+        <div id="progress-list" hx-get="/ui/progress" hx-trigger="load, every 1s"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 8px 0">Albums</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Artist</th>
+              <th>Title</th>
+              <th>Path</th>
+              <th>Updated</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            <tr class="section-row"><td colspan="6">Requested <span class="badge" style="margin-left:8px;">state=Requested</span></td></tr>
+          </tbody>
+          <tbody id="requested" hx-get="/ui/requested" hx-trigger="load, every 1s"></tbody>
+
+          <tbody>
+            <tr class="section-row"><td colspan="6">Library <span class="badge" style="margin-left:8px;">state=Synchronized</span></td></tr>
+          </tbody>
+          <tbody id="albums" hx-get="/ui/albums" hx-trigger="load, every 2s"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

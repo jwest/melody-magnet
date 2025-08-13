@@ -54,7 +54,7 @@ impl Track {
 
 impl MappedForPathName for Track {
     fn path_name(&self) -> String {
-        format!("{:02} {} - {}.flac", self.track_number, sanitize_name(self.title.as_str()), sanitize_name(self.album.artist.name.as_str()))
+        format!("{:02} {} - {}.flac", self.track_number, sanitize_name(&self.title), sanitize_name(&self.album.artist.name))
     }
 }
 
@@ -74,7 +74,7 @@ impl Artist {
 
 impl MappedForPathName for Artist {
     fn path_name(&self) -> String {
-        sanitize_name(self.name.as_str())
+        sanitize_name(&self.name)
     }
 }
 
@@ -115,7 +115,7 @@ impl Album {
 
 impl MappedForPathName for Album {
     fn path_name(&self) -> String {
-        format!("{} {}", self.release_date.year(), sanitize_name(self.title.as_str()))
+        format!("{} {}", self.release_date.year(), sanitize_name(&self.title))
     }
 }
 
@@ -206,7 +206,7 @@ impl SessionStore {
     }
 }
 
-fn sanitize_name(input: &str) -> String {
+fn sanitize_name(input: &String) -> String {
     input
         .replace("/","_")
         .replace("\\","_")

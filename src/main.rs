@@ -38,12 +38,10 @@ fn main() {
         }
     }).unwrap();
 
-    // Run cron in its own thread so HTTP server can run concurrently
     std::thread::spawn(move || {
         cron.start_blocking();
     });
 
-    // Start embedded HTTP server (blocking)
     http::start_http_server(config);
 }
 
@@ -90,7 +88,6 @@ fn sync_favourites() {
 
             for track in tracks {
                 if http::progress::is_canceled(album_id.as_str()) {
-                    // stop processing this album
                     http::progress::mark_canceled(album_id.as_str());
                     http::progress::clear_cancel(album_id.as_str());
                     let _ = registry.delete_album_by_id(album_id.as_str());
@@ -102,7 +99,6 @@ fn sync_favourites() {
                     if library.save_track(&track, &track_source, &cover_source).is_err() {
                         error!("Failed to save track");
                     }
-                    // update progress roughly by per-track completion; bytes unknown here, use size if available
                     let bytes = track_source.len() as u64;
                     http::progress::track_saved(album_id.as_str(), bytes);
                     Ok(())
@@ -110,12 +106,10 @@ fn sync_favourites() {
             }
 
             if !http::progress::is_canceled(album_id.as_str()) {
-                // finalize album progress and state
                 http::progress::album_done(album_id.as_str());
                 http::progress::clear(album_id.as_str());
                 let _ = registry.mark_album_as_synchronized(&album);
             } else {
-                // already handled deletion and marking canceled
                 http::progress::clear(album_id.as_str());
             }
         } else {
@@ -124,9 +118,6 @@ fn sync_favourites() {
     }
 
     print_stats(&registry);
-
-    // mark album done in progress (any remaining marked as processing but no tracks saved)
-    // We can't know which album without context here; progress will be cleared when synchronized in loop.
 
     match tidal_backend.get_favorite_albums() {
         Ok(favourite_albums) => {

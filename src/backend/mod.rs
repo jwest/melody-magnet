@@ -217,6 +217,11 @@ impl SessionStore {
 
 fn sanitize_name(input: &String) -> String {
     input
+        .replace(|c: char| !c.is_ascii(), "_")
         .replace("/","_")
         .replace("\\","_")
+        .replace(":", "_")
+        .replace("?", "_")
+        .replace(".", "_")
+        .replace("~", "_")
 }

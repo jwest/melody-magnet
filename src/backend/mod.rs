@@ -215,9 +215,33 @@ impl SessionStore {
     }
 }
 
+fn convert_diacritics(c: char) -> char {
+    match c {
+        'á' | 'à' | 'ã' | 'â' | 'ä' => 'a',
+        'é' | 'è' | 'ê' | 'ë' => 'e',
+        'í' | 'ì' | 'î' | 'ï' => 'i',
+        'ó' | 'ò' | 'õ' | 'ô' | 'ö' => 'o',
+        'ú' | 'ù' | 'û' | 'ü' => 'u',
+        'ý' | 'ÿ' => 'y',
+        'ñ' => 'n',
+        'ç' => 'c',
+        'Á' | 'À' | 'Ã' | 'Â' | 'Ä' => 'A',
+        'É' | 'È' | 'Ê' | 'Ë' => 'E',
+        'Í' | 'Ì' | 'Î' | 'Ï' => 'I',
+        'Ó' | 'Ò' | 'Õ' | 'Ô' | 'Ö' => 'O',
+        'Ú' | 'Ù' | 'Û' | 'Ü' => 'U',
+        'Ý' => 'Y',
+        'Ñ' => 'N',
+        'Ç' => 'C',
+        _ => c
+    }
+}
+
 fn sanitize_name(input: &String) -> String {
     input
-        .replace(|c: char| !c.is_ascii(), "_")
+        .chars()
+        .map(|c| if c.is_ascii() { c } else { convert_diacritics(c) })
+        .collect::<String>()
         .replace("/","_")
         .replace("\\","_")
         .replace(":", "_")
@@ -225,3 +249,4 @@ fn sanitize_name(input: &String) -> String {
         .replace(".", "_")
         .replace("~", "_")
 }
+

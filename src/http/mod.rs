@@ -80,9 +80,7 @@ pub fn start_http_server(config: Config) {
                 let _ = request.respond(json_response(serde_json::to_string(&snapshot).unwrap()));
             }
             (Method::Post, path) if path.starts_with("/api/cancel") => {
-                // support id via query string or JSON body {"id":"..."}
                 let mut album_id: Option<String> = None;
-                // try query param first
                 let query = url.splitn(2, '?').nth(1).unwrap_or("");
                 if !query.is_empty() {
                     let params: HashMap<_, _> = url::form_urlencoded::parse(query.as_bytes()).into_owned().collect();
@@ -94,9 +92,7 @@ pub fn start_http_server(config: Config) {
                     }
                 }
                 if let Some(id) = album_id {
-                    // request cancel for any active processing
                     progress::request_cancel(&id);
-                    // also remove from DB if it is still in Requested state so it won't be picked up later
                     let conn = rusqlite::Connection::open(config.database_file_path.clone());
                     if let Ok(conn) = conn {
                         let _ = conn.execute("DELETE FROM album_state WHERE id = ?1 AND state = 'Requested'", rusqlite::params![id]);
@@ -108,9 +104,7 @@ pub fn start_http_server(config: Config) {
                 }
             }
             (Method::Post, path) if path.starts_with("/api/remove") => {
-                // support id via query string or JSON body {"id":"..."}
                 let mut album_id: Option<String> = None;
-                // try query param first
                 let query = url.splitn(2, '?').nth(1).unwrap_or("");
                 if !query.is_empty() {
                     let params: HashMap<_, _> = url::form_urlencoded::parse(query.as_bytes()).into_owned().collect();
@@ -122,10 +116,8 @@ pub fn start_http_server(config: Config) {
                     }
                 }
                 if let Some(id) = album_id {
-                    // open DB
                     let conn = rusqlite::Connection::open(config.database_file_path.clone());
                     if let Ok(conn) = conn {
-                        // try to load album path (only for synchronized items we expect to be in library)
                         let mut album_path: Option<String> = None;
                         let _ = conn.query_row(
                             "SELECT path FROM album_state WHERE id = ?1",
@@ -185,7 +177,7 @@ pub fn start_http_server(config: Config) {
             (Method::Get, path) if path.starts_with("/ui/requested") => {
                 let html = match list_albums(&config.database_file_path, "Requested", 10000, 0) {
                     Ok(albums) => {
-                        let rows: Vec<ui::AlbumRow> = albums.into_iter().map(AlbumRow::from).collect();
+                        let rows: Vec<AlbumRow> = albums.into_iter().map(AlbumRow::from).collect();
                         ui::render_albums_tbody("Requested", &rows)
                     },
                     Err(_) => String::new(),
@@ -195,7 +187,7 @@ pub fn start_http_server(config: Config) {
             (Method::Get, path) if path.starts_with("/ui/albums") => {
                 let html = match list_albums(&config.database_file_path, "Synchronized", 10000, 0) {
                     Ok(albums) => {
-                        let rows: Vec<ui::AlbumRow> = albums.into_iter().map(AlbumRow::from).collect();
+                        let rows: Vec<AlbumRow> = albums.into_iter().map(AlbumRow::from).collect();
                         ui::render_albums_tbody("Synchronized", &rows)
                     },
                     Err(_) => String::new(),

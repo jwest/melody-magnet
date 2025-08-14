@@ -79,7 +79,7 @@ pub fn start_http_server(config: Config) {
                 let snapshot = progress::snapshot();
                 let _ = request.respond(json_response(serde_json::to_string(&snapshot).unwrap()));
             }
-            (Method::Post, path) if path.starts_with("/api/cancel") => {
+            (Method::Post, path) if path.starts_with("/api/cancel") || path.starts_with("/ui/cancel") => {
                 let mut album_id: Option<String> = None;
                 let query = url.splitn(2, '?').nth(1).unwrap_or("");
                 if !query.is_empty() {
@@ -97,13 +97,17 @@ pub fn start_http_server(config: Config) {
                     if let Ok(conn) = conn {
                         let _ = conn.execute("DELETE FROM album_state WHERE id = ?1 AND state = 'Requested'", rusqlite::params![id]);
                     }
-                    let payload = serde_json::json!({"status":"ok"});
-                    let _ = request.respond(json_response(payload.to_string()));
+                    if path.starts_with("/ui/") {
+                        let _ = request.respond(html_response(String::new()));
+                    } else {
+                        let payload = serde_json::json!({"status":"ok"});
+                        let _ = request.respond(json_response(payload.to_string()));
+                    }
                 } else {
                     let _ = request.respond(error_response(StatusCode(400), "missing id"));
                 }
             }
-            (Method::Post, path) if path.starts_with("/api/remove") => {
+            (Method::Post, path) if path.starts_with("/api/remove") || path.starts_with("/ui/remove") => {
                 let mut album_id: Option<String> = None;
                 let query = url.splitn(2, '?').nth(1).unwrap_or("");
                 if !query.is_empty() {
@@ -137,8 +141,12 @@ pub fn start_http_server(config: Config) {
                         }
                         let _ = conn.execute("DELETE FROM album_state WHERE id = ?1", rusqlite::params![id]);
                     }
-                    let payload = serde_json::json!({"status":"ok"});
-                    let _ = request.respond(json_response(payload.to_string()));
+                    if path.starts_with("/ui/") {
+                        let _ = request.respond(html_response(String::new()));
+                    } else {
+                        let payload = serde_json::json!({"status":"ok"});
+                        let _ = request.respond(json_response(payload.to_string()));
+                    }
                 } else {
                     let _ = request.respond(error_response(StatusCode(400), "missing id"));
                 }

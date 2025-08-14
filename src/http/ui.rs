@@ -74,7 +74,7 @@ pub fn render_progress_html(progress: &[ProgressView<'_>]) -> String {
         out.push_str(&format!(
             "<div style=\"margin:6px 0; display:flex; justify-content:space-between; align-items:center; gap:8px;\">\
                 <div><b>{artist} - {title}</b> <span class=muted>({done}/{total})</span></div>\
-                <button hx-post=\"/api/cancel?id={id}\" class=btn-danger>Cancel</button>\
+                <button hx-post=\"/ui/cancel?id={id}\" hx-swap=\"none\" class=btn-danger>Cancel</button>\
              </div>\
              <div class=progress><div class=bar style=\"width:{pct:.0}%\"></div></div>\
              <div class=muted>{state} • {bytes} bytes</div>",
@@ -124,7 +124,7 @@ pub fn render_albums_tbody(state: &str, albums: &[AlbumRow]) -> String {
         let title = a.title.as_deref().unwrap_or("");
         if state == "Requested" {
             out.push_str(&format!(
-                "<tr><td>{id}</td><td>{artist}</td><td>{title}</td><td>{path}</td><td class=muted>-</td><td><button hx-post=\"/api/cancel?id={id}\" class=btn-danger>Cancel</button></td></tr>",
+                "<tr><td>{id}</td><td>{artist}</td><td>{title}</td><td>{path}</td><td class=muted>-</td><td><button hx-post=\"/ui/cancel?id={id}\" hx-swap=\"none\" class=btn-danger>Cancel</button></td></tr>",
                 id = a.id,
                 artist = escape_html(artist),
                 title = escape_html(title),
@@ -132,7 +132,7 @@ pub fn render_albums_tbody(state: &str, albums: &[AlbumRow]) -> String {
             ));
         } else {
             out.push_str(&format!(
-                "<tr><td>{id}</td><td>{artist}</td><td>{title}</td><td>{path}</td><td class=muted>{updated}</td><td><button hx-confirm=\"Remove this album from library? This will delete files.\" hx-post=\"/api/remove?id={id}\" class=btn-danger>Remove</button></td></tr>",
+                "<tr><td>{id}</td><td>{artist}</td><td>{title}</td><td>{path}</td><td class=muted>{updated}</td><td><button hx-confirm=\"Remove this album from library? This will delete files.\" hx-post=\"/ui/remove?id={id}\" hx-swap=\"none\" class=btn-danger>Remove</button></td></tr>",
                 id = a.id,
                 artist = escape_html(artist),
                 title = escape_html(title),

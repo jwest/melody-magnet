@@ -143,7 +143,7 @@ impl Iterator for Pagination {
 
     fn next(&mut self) -> Option<Self::Item> {
         let next_page_number = self.current.page_number + 1;
-        let next_offset = next_page_number * self.current.limit;
+        let next_offset = self.current.page_number * self.current.limit;
 
         self.current = Page { page_number: self.current.page_number + 1, limit: self.current.limit, offset: next_offset };
 

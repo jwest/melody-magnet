@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-
+use chrono::format;
 use log::{error, info};
 use serde::Serialize;
 use tiny_http::{Header, Method, Response, Server, StatusCode};
@@ -144,7 +144,7 @@ pub fn start_http_server(config: Config) {
                 }
             }
             (Method::Get, "/ui/now") => {
-                let now = chrono::Local::now().format("%H:%M:%S").to_string();
+                let now = format!("{}, {}", chrono::Local::now().format("%H:%M:%S").to_string(), env!("CARGO_PKG_VERSION"));
                 let _ = request.respond(html_response(ui::render_now(&now)));
             }
             (Method::Get, "/ui/stats") => {
